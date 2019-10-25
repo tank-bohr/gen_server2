@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/tank-bohr/gen_server2.svg?branch=master)](https://travis-ci.org/tank-bohr/gen_server2)
+
 gen_server2
 =====
 
