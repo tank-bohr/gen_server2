@@ -13,9 +13,9 @@ Build
 
 Not implemented
 
-    - [] timeouts
-    - [] handle_continue
-    - [] hibernation
-    - [] registerd processes
-    - [] enter_loop
-    - [] distibute stuff
+- [] timeouts
+- [] handle_continue
+- [] hibernation
+- [] registerd processes
+- [] enter_loop
+- [] distibute stuff
