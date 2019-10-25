@@ -6,6 +6,7 @@ otp_release:
 script:
   - rebar3 compile
   - rebar3 lint
+  - rebar3 dialyzer
 
 cache:
   directories:
