@@ -19,3 +19,17 @@ Not implemented
 - [ ] registerd processes
 - [ ] enter_loop
 - [ ] distibute stuff
+
+```
+cloc src/gen_server2.erl
+       1 text file.
+       1 unique file.
+       0 files ignored.
+
+github.com/AlDanial/cloc v 1.80  T=0.01 s (78.9 files/s, 9312.6 lines/s)
+-------------------------------------------------------------------------------
+Language                     files          blank        comment           code
+-------------------------------------------------------------------------------
+Erlang                           1             18              0            100
+-------------------------------------------------------------------------------
+```
