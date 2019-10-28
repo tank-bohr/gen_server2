@@ -14,11 +14,11 @@ Build
 Not implemented
 
 - [ ] timeouts
-- [ ] handle_continue
-- [ ] hibernation
-- [ ] registerd processes
-- [ ] enter_loop
-- [ ] distibute stuff
+- [ ] handle_continue -- just a sugar. but we can easily support it
+- [ ] hibernation -- better to do every time.
+- [ ] registered processes - Need to choose between gpoc/pg2/global/syn/whatever
+- [ ] ~~enter_loop~~ there is no good reason to us it. There is no any popular open-source library that uses it. Requires `proc_lib`.
+- [ ] ~~distibuted stuff~~ `multicall` and `abcast` shoud be done within registry
 
 ```
 cloc src/gen_server2.erl
