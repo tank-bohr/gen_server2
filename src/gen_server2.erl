@@ -30,10 +30,12 @@
 -callback terminate(term(), term()) -> any().
 
 start(Module, Args) ->
-    spawn(fun() -> init(self(), Module, Args) end).
+    Parent = self(),
+    spawn(fun() -> init(Parent, Module, Args) end).
 
 start_link(Module, Args) ->
-    spawn_link(fun() -> init(self(), Module, Args) end).
+    Parent = self(),
+    spawn_link(fun() -> init(Parent, Module, Args) end).
 
 stop(Server) ->
     stop(Server, normal, infinity).
