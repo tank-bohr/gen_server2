@@ -11,6 +11,8 @@
     reply/2
 ]).
 
+-export([loop/2]).
+
 -define(CALL, '$gen_call').
 -define(CAST, '$gen_cast').
 -define(STOP, '$gen_stop').
@@ -28,10 +30,12 @@
 -callback terminate(term(), term()) -> any().
 
 start(Module, Args) ->
-    spawn(fun() -> init(self(), Module, Args) end).
+    Parent = self(),
+    spawn(fun() -> init(Parent, Module, Args) end).
 
 start_link(Module, Args) ->
-    spawn_link(fun() -> init(self(), Module, Args) end).
+    Parent = self(),
+    spawn_link(fun() -> init(Parent, Module, Args) end).
 
 stop(Server) ->
     stop(Server, normal, infinity).
@@ -57,11 +61,12 @@ init(Parent, Module, Args) ->
     put('$initial_call', {Module, init, 1}),
     case Module:init(Args) of
         {ok, State} ->
-            loop(Module, State);
+            erlang:hibernate(?MODULE, loop, [Module, State]);
         {stop, Reason} ->
             terminate(Module, unefined, Reason)
     end.
 
+%% @private
 loop(Module, State) ->
     receive
         {?CALL, From, Request} ->
