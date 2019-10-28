@@ -1,5 +1,7 @@
 -module(gen_server2).
 
+-include("gen_server2.hrl").
+
 -export([
     start/2,
     start_link/2,
@@ -7,26 +9,24 @@
     stop/3,
     call/2,
     call/3,
-    cast/2,
+    send/2,
+    wait/1,
+    wait/2,
     reply/2
 ]).
 
--export([loop/2]).
+-export([loop/3]).
 
--define(CALL, '$gen_call').
--define(CAST, '$gen_cast').
 -define(STOP, '$gen_stop').
+-define(SEND, '$gen_send').
+-define(DEFAULT_TIMEOUT, 5000).
+-define(IS_HIBERNATE(H), H =:= true orelse H =:= hibernate).
 
--callback init(term()) -> {ok, term()} | {stop, term()}.
--callback handle_call(atom(), term(), {pid(), reference()}) ->
-    {reply, term()} |
-    {noreply, term()} |
-    {stop, term(), term(), term()} |
-    {stop, term(), term()}.
--callback handle_cast(atom(), term()) ->
-    {noreply, term()} | {stop, term(), term()}.
--callback handle_info(term(), term()) ->
-    {noreply, term()} | {stop, term(), term()}.
+-type init_response() :: #ok{} | #stop{}.
+-type proc_response() :: #ok{} | #reply{} | #stop{}.
+
+-callback init(term()) -> init_response().
+-callback proc(term(), {pid(), reference()}, term()) -> proc_response().
 -callback terminate(term(), term()) -> any().
 
 start(Module, Args) ->
@@ -41,17 +41,32 @@ stop(Server) ->
     stop(Server, normal, infinity).
 
 stop(Server, Reason, Timeout) ->
-    send_and_wait(Server, ?STOP, Reason, Timeout).
+    wait(send(Server, Reason, ?STOP), Timeout).
 
 call(Server, Request) ->
-    call(Server, Request, 5000).
+    call(Server, Request, ?DEFAULT_TIMEOUT).
 
 call(Server, Request, Timeout) ->
-    send_and_wait(Server, ?CALL, Request, Timeout).
+    wait(send(Server, Request), Timeout).
 
-cast(Server, Request) ->
-    Server ! {?CAST, Request},
-    ok.
+send(Server, Request) ->
+    send(Server, Request, ?SEND).
+
+send(Server, Request, Type) ->
+    Tag = make_ref(),
+    Server ! {Type, {self(), Tag}, Request},
+    Tag.
+
+wait(Tag) ->
+    wait(Tag, ?DEFAULT_TIMEOUT).
+
+wait(Tag, Timeout) ->
+    receive
+        {Tag, Reply} ->
+            Reply
+    after Timeout ->
+        timeout
+    end.
 
 reply({Pid, Tag}, Reply) ->
     Pid ! {Tag, Reply}.
@@ -60,63 +75,42 @@ init(Parent, Module, Args) ->
     put('$ancestors', [Parent]),
     put('$initial_call', {Module, init, 1}),
     case Module:init(Args) of
-        {ok, State} ->
-            erlang:hibernate(?MODULE, loop, [Module, State]);
-        {stop, Reason} ->
-            terminate(Module, unefined, Reason)
+        #ok{state = State, timeout = Timeout, hibernate = Hibernate} ->
+            loop(Module, State, Timeout, Hibernate);
+        #stop{reason = Reason, state = State} ->
+            terminate(Module, State, Reason)
     end.
 
+loop(Module, State, Timeout, Hibernate) when ?IS_HIBERNATE(Hibernate) ->
+    erlang:hibernate(?MODULE, loop, [Module, State, Timeout]);
+loop(Module, State, Timeout, _) ->
+    loop(Module, State, Timeout).
+
 %% @private
-loop(Module, State) ->
+loop(Module, State, Timeout) ->
     receive
-        {?CALL, From, Request} ->
-            handle_call(Module, State, From, Request);
-        {?CAST, Request} ->
-            handle_cast(Module, State, Request);
+        {?SEND, From, Request} ->
+            proc(Module, State, From, Request);
         {?STOP, Reason} ->
             terminate(Module, State, Reason);
         Info ->
-            handle_info(Module, State, Info)
-    end.
-
-handle_call(Module, State, From, Request) ->
-    case Module:handle_call(Request, From, State) of
-        {reply, Reply, NewState} ->
-            reply(From, Reply),
-            loop(Module, NewState);
-        {noreply, NewState} ->
-            loop(Module, NewState);
-        {stop, Reason, Reply, NewState} ->
-            reply(From, Reply),
-            terminate(Module, NewState, Reason);
-        {stop, Reason, NewState} ->
-            terminate(Module, NewState, Reason)
-    end.
-
-handle_cast(Module, State, Request) ->
-    case Module:handle_cast(Request, State) of
-        {noreply, NewState} ->
-            loop(Module, NewState);
-        {stop, Reason, NewState} ->
-            terminate(Module, NewState, Reason)
-    end.
-
-handle_info(Module, State, Info) ->
-    case Module:handle_info(Info, State) of
-        {noreply, NewState} ->
-            loop(Module, NewState);
-        {stop, Reason, NewState} ->
-            terminate(Module, NewState, Reason)
-    end.
-
-send_and_wait(Server, Type, Message, Timeout) ->
-    Tag = make_ref(),
-    Server ! {Type, {self(), Tag}, Message},
-    receive
-        {Tag, Reply} ->
-            Reply
+            proc(Module, State, undefined, Info)
     after Timeout ->
-        timeout
+        self() ! timeout
+    end.
+
+proc(Module, State, From, Request) ->
+    case Module:proc(Request, From, State) of
+        #ok{state = NewState, timeout = T, hibernate = H} ->
+            loop(Module, NewState, T, H);
+        #reply{reply = Reply, state = NewState, timeout = T, hibernate = H} ->
+            reply(From, Reply),
+            loop(Module, NewState, T, H);
+        #stop{reason = Reason, reply = ?NOREPLY, state = NewState} ->
+            terminate(Module, NewState, Reason);
+        #stop{reason = Reason, reply = Reply, state = NewState} ->
+            reply(From, Reply),
+            terminate(Module, NewState, Reason)
     end.
 
 terminate(Module, State, Reason) ->
