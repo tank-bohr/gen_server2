@@ -1,5 +1,6 @@
 -module(fizz_buzz_server).
 -include_lib("gen_server2/include/gen_server2.hrl").
+-include_lib("gen_server2/include/gen_server2_spec.hrl").
 
 -export([
     start_link/0,
@@ -7,7 +8,6 @@
     print/1
 ]).
 
--behaviour(gen_server2).
 -export([
     proc/3
 ]).
