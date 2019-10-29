@@ -4,7 +4,7 @@ otp_release:
   - 22.1
 
 script:
-  - rebar3 do lint, ct, dialyzer
+  - rebar3 do ct, dialyzer
 
 cache:
   directories:
