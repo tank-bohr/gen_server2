@@ -9,9 +9,7 @@
 
 -behaviour(gen_server2).
 -export([
-    init/1,
-    proc/3,
-    terminate/2
+    proc/3
 ]).
 
 -record(state, {
@@ -21,15 +19,16 @@
 start_link() ->
     gen_server2:start_link(?MODULE, []).
 
-init([]) ->
-    #ok{state = #state{}}.
-
 next(Server) ->
     gen_server2:call(Server, next).
 
 print(Server) ->
     gen_server2:call(Server, print).
 
+proc(init, _, []) ->
+    #ok{state = #state{}};
+proc(terminate, _Reason, _State) ->
+    ok;
 proc(next, _From, #state{current = Cur} = State) ->
     Next = Cur + 1,
     #reply{reply = fizz_buzz(Next), state = State#state{current = Next}};
@@ -40,9 +39,6 @@ proc(print, _From, #state{current = Cur} = State) ->
 proc(Unexpected, _From, State) ->
     io:format("Unexpected message: ~p~n", [Unexpected]),
     #ok{state = State}.
-
-terminate(_Reason, _State) ->
-    ok.
 
 fizz_buzz(Num) ->
     case {Num rem 3, Num rem 5} of
