@@ -91,8 +91,9 @@ loop(Module, State, Timeout) ->
     receive
         {?SEND, From, Request} ->
             proc(Module, State, From, Request);
-        {?STOP, Reason} ->
-            terminate(Module, State, Reason);
+        {?STOP, From, Reason} ->
+            terminate(Module, State, Reason),
+            reply(From, ok);
         Info ->
             proc(Module, State, undefined, Info)
     after Timeout ->
