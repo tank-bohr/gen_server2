@@ -109,7 +109,7 @@ proc_init(Module, State, From, Request) ->
             terminate(Module, Reason, NewState);
         ignore ->
             reply(From, ignore),
-            loop(Module, State, ?DEFAULT_TIMEOUT)
+            terminate(Module, ignore, State)
     end.
 
 proc(Module, State, From, Request) ->
