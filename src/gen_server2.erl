@@ -22,6 +22,11 @@
 -define(DEFAULT_TIMEOUT, 5000).
 -define(IS_HIBERNATE(H), H =:= true orelse H =:= hibernate).
 
+-callback proc(Request, FromOrReason, State) -> #ok{} | #reply{} | #stop{} when
+    Request      :: init | terminate | term(),
+    FromOrReason :: pid() | {pid(), reference()} | term(),
+    State        :: term().
+
 start(Module, Args) ->
     Parent = self(),
     spawn(fun() -> init(Parent, Module, Args) end).
