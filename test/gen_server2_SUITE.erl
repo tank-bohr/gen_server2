@@ -15,7 +15,7 @@ all() ->
     [fizz_buzz_test].
 
 fizz_buzz_test(_Config) ->
-    Server = fizz_buzz_server:start_link(),
+    {ok, Server} = fizz_buzz_server:start_link(),
     ?assertEqual(1, fizz_buzz_server:next(Server)),
     ?assertEqual(2, fizz_buzz_server:next(Server)),
     ?assertEqual(<<"Fizz">>, fizz_buzz_server:next(Server)),
