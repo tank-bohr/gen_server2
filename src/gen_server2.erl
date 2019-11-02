@@ -17,8 +17,9 @@
 
 -export([loop/3]).
 
--define(STOP, '$gen_stop').
+-define(INIT, '$gen_init').
 -define(SEND, '$gen_send').
+-define(STOP, '$gen_stop').
 -define(DEFAULT_TIMEOUT, 5000).
 -define(IS_HIBERNATE(H), H =:= true orelse H =:= hibernate).
 
@@ -28,12 +29,10 @@
     State        :: term().
 
 start(Module, Args) ->
-    Parent = self(),
-    spawn(fun() -> init(Parent, Module, Args) end).
+    init(spawn(fun() -> loop(Module, Args, 0, false) end)).
 
 start_link(Module, Args) ->
-    Parent = self(),
-    spawn_link(fun() -> init(Parent, Module, Args) end).
+    init(spawn_link(fun() -> loop(Module, Args, 0, false) end)).
 
 stop(Server) ->
     stop(Server, normal, infinity).
@@ -69,13 +68,14 @@ wait(Tag, Timeout) ->
 reply({Pid, Tag}, Reply) ->
     Pid ! {Tag, Reply}.
 
-init(Parent, Module, Args) ->
-    put('$ancestors', [Parent]),
-    case Module:proc(init, Parent, Args) of
-        #ok{state = State, timeout = Timeout, hibernate = Hibernate} ->
-            loop(Module, State, Timeout, Hibernate);
-        #stop{reason = Reason, state = State} ->
-            terminate(Module, Reason, State)
+init(Pid) ->
+    case wait(send(Pid, init, ?INIT)) of
+        ok ->
+            {ok, Pid};
+        ignore ->
+            ignore;
+        Else ->
+            {error, Else}
     end.
 
 loop(Module, State, Timeout, Hibernate) when ?IS_HIBERNATE(Hibernate) ->
@@ -86,6 +86,8 @@ loop(Module, State, Timeout, _) ->
 %% @private
 loop(Module, State, Timeout) ->
     receive
+        {?INIT, From, Request} ->
+            proc_init(Module, State, From, Request);
         {?SEND, From, Request} ->
             proc(Module, State, From, Request);
         {?STOP, From, Reason} ->
@@ -95,6 +97,19 @@ loop(Module, State, Timeout) ->
             proc(Module, State, undefined, Info)
     after Timeout ->
         self() ! timeout
+    end.
+
+proc_init(Module, State, From, Request) ->
+    case Module:proc(Request, From, State) of
+        #ok{state = NewState, timeout = T, hibernate = H} ->
+            reply(From, ok),
+            loop(Module, NewState, T, H);
+        #stop{reason = Reason, state = NewState} ->
+            reply(From, Reason),
+            terminate(Module, Reason, NewState);
+        ignore ->
+            reply(From, ignore),
+            loop(Module, State, ?DEFAULT_TIMEOUT)
     end.
 
 proc(Module, State, From, Request) ->
