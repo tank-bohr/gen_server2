@@ -25,14 +25,18 @@ next(Server) ->
 print(Server) ->
     gen_server2:call(Server, print).
 
-proc(init, _, []) ->
+-record(sup, {msg}).
+-record(srv, {msg}).
+-record(fb,  {msg}).
+
+proc(#fb{msg=init}, _, []) ->
     #ok{state = #state{}};
-proc(terminate, _Reason, _State) ->
+proc(#fb{msg=terminate}, _Reason, _State) ->
     ok;
-proc(next, _From, #state{current = Cur} = State) ->
+proc(#fb{msg=next}, _From, #state{current = Cur} = State) ->
     Next = Cur + 1,
     #reply{reply = fizz_buzz(Next), state = State#state{current = Next}};
-proc(print, _From, #state{current = Cur} = State) ->
+proc(#fb{msg=print}, _From, #state{current = Cur} = State) ->
     Next = Cur + 1,
     io:format("~p~n", [fizz_buzz(Next)]),
     #ok{state = State#state{current = Next}};

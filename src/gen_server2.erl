@@ -20,11 +20,12 @@
 -define(INIT, '$gen_init').
 -define(SEND, '$gen_send').
 -define(STOP, '$gen_stop').
+
 -define(DEFAULT_TIMEOUT, 5000).
 -define(IS_HIBERNATE(H), H =:= true orelse H =:= hibernate).
 
 -callback proc(Request, FromOrReason, State) -> #ok{} | #reply{} | #stop{} when
-    Request      :: init | terminate | term(),
+    Request      :: tuple(),
     FromOrReason :: pid() | {pid(), reference()} | term(),
     State        :: term().
 
@@ -83,33 +84,16 @@ loop(Module, State, Timeout, Hibernate) when ?IS_HIBERNATE(Hibernate) ->
 loop(Module, State, Timeout, _) ->
     loop(Module, State, Timeout).
 
+% pid(X) ! #srv{init}.
+% pid(X) ! #sup{init}.
+% pid(X) ! #ftp{init}.
+
 %% @private
 loop(Module, State, Timeout) ->
     receive
-        {?INIT, From, Request} ->
-            proc_init(Module, State, From, Request);
-        {?SEND, From, Request} ->
-            proc(Module, State, From, Request);
-        {?STOP, From, Reason} ->
-            terminate(Module, Reason, State),
-            reply(From, ok);
-        Info ->
-            proc(Module, State, undefined, Info)
+        Info -> proc(Module, State, undefined, Info)
     after Timeout ->
         self() ! timeout
-    end.
-
-proc_init(Module, State, From, Request) ->
-    case Module:proc(Request, From, State) of
-        #ok{state = NewState, timeout = T, hibernate = H} ->
-            reply(From, ok),
-            loop(Module, NewState, T, H);
-        #stop{reason = Reason, state = NewState} ->
-            reply(From, Reason),
-            terminate(Module, Reason, NewState);
-        ignore ->
-            reply(From, ignore),
-            loop(Module, State, ?DEFAULT_TIMEOUT)
     end.
 
 proc(Module, State, From, Request) ->
@@ -119,12 +103,7 @@ proc(Module, State, From, Request) ->
         #reply{reply = Reply, state = NewState, timeout = T, hibernate = H} ->
             reply(From, Reply),
             loop(Module, NewState, T, H);
-        #stop{reason = Reason, reply = ?NOREPLY, state = NewState} ->
-            terminate(Module, Reason, NewState);
         #stop{reason = Reason, reply = Reply, state = NewState} ->
-            reply(From, Reply),
-            terminate(Module, Reason, NewState)
+            reply(From, Reply)
     end.
 
-terminate(Module, Reason, State) ->
-    Module:proc(terminate, Reason, State).
