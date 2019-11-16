@@ -11,7 +11,7 @@
 -include("gen_server2.hrl").
 -export([proc/3]).
 
--record(foo, {
+-record(compat, {
     mod  :: atom(),
     func :: atom(),
     args :: term()
@@ -30,15 +30,15 @@ start_link(Module, Args) ->
 
 start_link(Module, Args, Options) ->
     Server = gen_server2:start(?MODULE, [{spawn_opt, [link]} | Options]),
-    gen_server2:call(Server, #foo{mod = Module, func = init, args = Args}).
+    gen_server2:call(Server, #compat{mod = Module, func = init, args = Args}).
 
 stop(Server) ->
     ?FUNCTION_NAME(Server, normal, infinity).
 
 stop(Server, Reason, Timeout) ->
-    gen_server2:call(Server, #foo{func = terminate, args = Reason}, Timeout).
+    gen_server2:call(Server, #compat{func = terminate, args = Reason}, Timeout).
 
-proc(#foo{func = init, mod = Module, args = Args}, _From, _) ->
+proc(#compat{func = init, mod = Module, args = Args}, _From, _) ->
     case Module:init(Args) of
         {ok, State} ->
             #reply{reply = {ok, self()},
@@ -53,7 +53,7 @@ proc(#foo{func = init, mod = Module, args = Args}, _From, _) ->
             Module:terminate(Reason, undefined),
             #stop{reply = {error, reason}, reason = Reason}
     end;
-proc(#foo{func = terminate, args = Reason}, _, #state{state = State, mod = Module}) ->
+proc(#compat{func = terminate, args = Reason}, _, #state{state = State, mod = Module}) ->
     Module:terminate(Reason, State),
     #stop{reply = ok, reason = Reason,
         state = #state{state = State, mod = Module}}.
