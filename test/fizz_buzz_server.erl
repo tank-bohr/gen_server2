@@ -3,6 +3,7 @@
 
 -export([
     start_link/0,
+    stop/3,
     next/1,
     print/1
 ]).
@@ -17,11 +18,12 @@
 }).
 
 -record(fb, { %% fizz_buzz
-    msg = init :: init | next | print
+    msg = init :: init | next | print | stop
 }).
 
 start_link() ->
-    gen_server2:start_link(?MODULE, #fb{}).
+    Pid = gen_server2:start(?MODULE, [{spawn_opt, [link]}]),
+    gen_server2:call(Pid, #fb{}).
 
 next(Server) ->
     gen_server2:call(Server, #fb{msg = next}).
@@ -29,8 +31,11 @@ next(Server) ->
 print(Server) ->
     gen_server2:call(Server, #fb{msg = print}).
 
+stop(Server, _Reason, Timeout) ->
+    gen_server2:call(Server, #fb{msg = stop}, Timeout).
+
 proc(#fb{msg = init}, _Parent, ?NOSTATE) ->
-    #ok{state = #state{}};
+    #reply{reply = {ok, self()}, state = #state{}};
 proc(#fb{msg = next}, _From, #state{current = Cur} = State) ->
     Next = Cur + 1,
     #reply{reply = fizz_buzz(Next), state = State#state{current = Next}};
@@ -38,9 +43,8 @@ proc(#fb{msg = print}, _From, #state{current = Cur} = State) ->
     Next = Cur + 1,
     io:format("~p~n", [fizz_buzz(Next)]),
     #ok{state = State#state{current = Next}};
-proc(Unexpected, _From, State) ->
-    io:format("Unexpected message: ~p~n", [Unexpected]),
-    #ok{state = State}.
+proc(#fb{msg = stop}, _From, State) ->
+    #stop{state = State}.
 
 fizz_buzz(Num) ->
     case {Num rem 3, Num rem 5} of

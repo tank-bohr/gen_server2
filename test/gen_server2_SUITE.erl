@@ -34,10 +34,7 @@ fizz_buzz_test(_Config) ->
     ct:capture_start(),
     fizz_buzz_server:print(Server),
     ?assertEqual(["16\n"], ct:capture_get()),
-    Server ! pants,
-    ct:sleep(500),
-    ?assertEqual(["Unexpected message: pants\n"], ct:capture_get()),
     ct:capture_stop(),
     ?assert(is_process_alive(Server)),
-    gen_server2:stop(Server, kill, 500),
+    fizz_buzz_server:stop(Server, kill, 500),
     ?assert(not is_process_alive(Server)).

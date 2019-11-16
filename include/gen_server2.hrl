@@ -20,7 +20,7 @@
 -record(stop, {
     reason           :: term(),
     reply = ?NOREPLY :: term(),
-    state            :: term()
+    state = ?NOSTATE :: term()
 }).
 
 -endif.
