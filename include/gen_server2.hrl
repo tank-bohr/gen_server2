@@ -2,6 +2,7 @@
 -define(GEN_SERVER2_HRL, true).
 
 -define(NOREPLY, '$noreply').
+-define(NOSTATE, '$nostate').
 
 -record(ok, {
     state               :: term(),

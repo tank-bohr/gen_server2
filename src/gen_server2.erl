@@ -17,29 +17,32 @@
 
 -export([loop/3]).
 
--define(INIT, '$gen_init').
--define(SEND, '$gen_send').
--define(STOP, '$gen_stop').
-
 -define(DEFAULT_TIMEOUT, 5000).
 -define(IS_HIBERNATE(H), H =:= true orelse H =:= hibernate).
+-define(CORRECT_TYPE(T), T =:= init orelse T =:= send orelse T =:= stop).
 
--callback proc(Request, FromOrReason, State) -> #ok{} | #reply{} | #stop{} when
-    Request      :: tuple(),
-    FromOrReason :: pid() | {pid(), reference()} | term(),
-    State        :: term().
+-record(srv, {
+    type    :: init | send | stop,
+    from    :: {pid(), reference()},
+    request :: term()
+}).
 
-start(Module, Args) ->
-    init(spawn(fun() -> loop(Module, Args, 0, false) end)).
+-callback proc(Request, From, State) -> #ok{} | #reply{} | #stop{} when
+    Request :: tuple(),
+    From    :: {pid(), reference()},
+    State   :: tuple().
 
-start_link(Module, Args) ->
-    init(spawn_link(fun() -> loop(Module, Args, 0, false) end)).
+start(Module, Initial) ->
+    init(spawn(fun() -> loop(Module, ?NOSTATE, infinity) end), Initial).
+
+start_link(Module, Initial) ->
+    init(spawn_link(fun() -> loop(Module, ?NOSTATE, infinity) end), Initial).
 
 stop(Server) ->
     stop(Server, normal, infinity).
 
 stop(Server, Reason, Timeout) ->
-    wait(send(Server, Reason, ?STOP), Timeout).
+    wait(send(Server, Reason, stop), Timeout).
 
 call(Server, Request) ->
     call(Server, Request, ?DEFAULT_TIMEOUT).
@@ -48,11 +51,11 @@ call(Server, Request, Timeout) ->
     wait(send(Server, Request), Timeout).
 
 send(Server, Request) ->
-    send(Server, Request, ?SEND).
+    send(Server, Request, send).
 
-send(Server, Request, Type) ->
+send(Server, Request, Type) when ?CORRECT_TYPE(Type) ->
     Tag = make_ref(),
-    Server ! {Type, {self(), Tag}, Request},
+    Server ! #srv{type = Type, from = {self(), Tag}, request = Request},
     Tag.
 
 wait(Tag) ->
@@ -69,31 +72,38 @@ wait(Tag, Timeout) ->
 reply({Pid, Tag}, Reply) ->
     Pid ! {Tag, Reply}.
 
-init(Pid) ->
-    case wait(send(Pid, init, ?INIT)) of
-        ok ->
-            {ok, Pid};
-        ignore ->
-            ignore;
-        Else ->
-            {error, Else}
-    end.
+init(Server, Initial) ->
+    wait(send(Server, Initial, init)).
 
 loop(Module, State, Timeout, Hibernate) when ?IS_HIBERNATE(Hibernate) ->
-    erlang:hibernate(?MODULE, loop, [Module, State, Timeout]);
+    erlang:hibernate(?MODULE, ?FUNCTION_NAME, [Module, State, Timeout]);
 loop(Module, State, Timeout, _) ->
     loop(Module, State, Timeout).
-
-% pid(X) ! #srv{init}.
-% pid(X) ! #sup{init}.
-% pid(X) ! #ftp{init}.
 
 %% @private
 loop(Module, State, Timeout) ->
     receive
-        Info -> proc(Module, State, undefined, Info)
+        #srv{type = init, from = From, request = Request} ->
+            proc_init(Module, State, From, Request);
+        #srv{type = send, from = From, request = Request} ->
+            proc(Module, State, From, Request);
+        #srv{type = stop, from = From, request = Reason} ->
+            terminate(Reason, State),
+            reply(From, ok);
+        Info ->
+            proc(Module, State, undefined, Info)
     after Timeout ->
         self() ! timeout
+    end.
+
+proc_init(Module, State, {Parent, _} = From, Request) ->
+    case Module:proc(Request, Parent, State) of
+        #ok{state = NewState, timeout = T, hibernate = H} ->
+            reply(From, {ok, self()}),
+            loop(Module, NewState, T, H);
+        #stop{reason = Reason, state = NewState} ->
+            terminate(Reason, NewState),
+            reply(From, {error, Reason})
     end.
 
 proc(Module, State, From, Request) ->
@@ -103,7 +113,12 @@ proc(Module, State, From, Request) ->
         #reply{reply = Reply, state = NewState, timeout = T, hibernate = H} ->
             reply(From, Reply),
             loop(Module, NewState, T, H);
+        #stop{reason = Reason, reply = ?NOREPLY, state = NewState} ->
+            terminate(Reason, NewState);
         #stop{reason = Reason, reply = Reply, state = NewState} ->
+            terminate(Reason, NewState),
             reply(From, Reply)
     end.
 
+terminate(_Reason, _State) ->
+    ok.

@@ -16,27 +16,25 @@
     current = 0 :: non_neg_integer()
 }).
 
+-record(fb, { %% fizz_buzz
+    msg = init :: init | next | print
+}).
+
 start_link() ->
-    gen_server2:start_link(?MODULE, []).
+    gen_server2:start_link(?MODULE, #fb{}).
 
 next(Server) ->
-    gen_server2:call(Server, next).
+    gen_server2:call(Server, #fb{msg = next}).
 
 print(Server) ->
-    gen_server2:call(Server, print).
+    gen_server2:call(Server, #fb{msg = print}).
 
--record(sup, {msg}).
--record(srv, {msg}).
--record(fb,  {msg}).
-
-proc(#fb{msg=init}, _, []) ->
+proc(#fb{msg = init}, _Parent, ?NOSTATE) ->
     #ok{state = #state{}};
-proc(#fb{msg=terminate}, _Reason, _State) ->
-    ok;
-proc(#fb{msg=next}, _From, #state{current = Cur} = State) ->
+proc(#fb{msg = next}, _From, #state{current = Cur} = State) ->
     Next = Cur + 1,
     #reply{reply = fizz_buzz(Next), state = State#state{current = Next}};
-proc(#fb{msg=print}, _From, #state{current = Cur} = State) ->
+proc(#fb{msg = print}, _From, #state{current = Cur} = State) ->
     Next = Cur + 1,
     io:format("~p~n", [fizz_buzz(Next)]),
     #ok{state = State#state{current = Next}};
