@@ -9,7 +9,7 @@
 
 -behaviour(gen_server2).
 -include("gen_server2.hrl").
--export([proc/3]).
+-export([proc/2]).
 
 -record(compat, {
     mod  :: atom(),
@@ -38,7 +38,7 @@ stop(Server) ->
 stop(Server, Reason, Timeout) ->
     gen_server2:call(Server, #compat{func = terminate, args = Reason}, Timeout).
 
-proc(#compat{func = init, mod = Module, args = Args}, _From, _) ->
+proc(#compat{func = init, mod = Module, args = Args}, _) ->
     case Module:init(Args) of
         {ok, State} ->
             #reply{reply = {ok, self()},
@@ -53,7 +53,7 @@ proc(#compat{func = init, mod = Module, args = Args}, _From, _) ->
             Module:terminate(Reason, undefined),
             #stop{reply = {error, reason}, reason = Reason}
     end;
-proc(#compat{func = terminate, args = Reason}, _, #state{state = State, mod = Module}) ->
+proc(#compat{func = terminate, args = Reason}, #state{state = State, mod = Module}) ->
     Module:terminate(Reason, State),
     #stop{reply = ok, reason = Reason,
         state = #state{state = State, mod = Module}}.
