@@ -23,9 +23,8 @@
     request :: term()
 }).
 
--callback proc(Request, From, State) -> #ok{} | #reply{} | #stop{} when
+-callback proc(Request, State) -> #ok{} | #reply{} | #stop{} when
     Request :: tuple(),
-    From    :: {pid(), reference()} | undefined,
     State   :: tuple().
 
 start(Module) ->
@@ -78,7 +77,7 @@ loop(Module, State, Timeout) ->
     end.
 
 proc(Module, State, From, Request) ->
-    case Module:proc(Request, From, State) of
+    case Module:proc(Request, State) of
         #ok{state = NewState, timeout = T, hibernate = H} ->
             loop(Module, NewState, T, H);
         #reply{reply = Reply, state = NewState, timeout = T, hibernate = H} ->

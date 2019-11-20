@@ -10,7 +10,7 @@
 
 -behaviour(gen_server2).
 -export([
-    proc/3
+    proc/2
 ]).
 
 -record(state, {
@@ -34,16 +34,16 @@ print(Server) ->
 stop(Server, _Reason, Timeout) ->
     gen_server2:call(Server, #fb{msg = stop}, Timeout).
 
-proc(#fb{msg = init}, _Parent, ?NOSTATE) ->
+proc(#fb{msg = init}, ?NOSTATE) ->
     #reply{reply = {ok, self()}, state = #state{}};
-proc(#fb{msg = next}, _From, #state{current = Cur} = State) ->
+proc(#fb{msg = next}, #state{current = Cur} = State) ->
     Next = Cur + 1,
     #reply{reply = fizz_buzz(Next), state = State#state{current = Next}};
-proc(#fb{msg = print}, _From, #state{current = Cur} = State) ->
+proc(#fb{msg = print}, #state{current = Cur} = State) ->
     Next = Cur + 1,
     io:format("~p~n", [fizz_buzz(Next)]),
     #ok{state = State#state{current = Next}};
-proc(#fb{msg = stop}, _From, State) ->
+proc(#fb{msg = stop}, State) ->
     #stop{state = State}.
 
 fizz_buzz(Num) ->
