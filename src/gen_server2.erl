@@ -1,53 +1,61 @@
 -module(gen_server2).
-
 -include("gen_server2.hrl").
 
+-export([start/2]).
+
 -export([
-    start/1,
-    start/2,
-    call/2,
-    call/3,
     send/2,
     wait/1,
     wait/2,
+    call/2,
+    call/3,
     reply/2
 ]).
 
--export([loop/3]).
+-export([loop/2]).
 
--define(DEFAULT_TIMEOUT, 5000).
 -define(IS_HIBERNATE(H), H =:= true orelse H =:= hibernate).
 
--record(srv, {
-    from    :: {pid(), reference()},
-    request :: term()
+-type state()   :: ?NOSTATE | tuple().
+-type return()  :: #ok{} | #stop{}.
+-type from()    :: {pid(), reference()}.
+-type request() :: tuple().
+
+-callback proc(Request, State) -> return() when
+    Request :: request(),
+    State   :: state().
+
+-callback proc(Request, From, State) -> return() when
+    Request :: request(),
+    From    :: from(),
+    State   :: state().
+
+-optional_callbacks([proc/3]).
+
+-record(sync, {
+    request :: request(),
+    from    :: from()
 }).
 
--callback proc(Request, State) -> #ok{} | #reply{} | #stop{} when
-    Request :: tuple(),
-    State   :: tuple().
+-record(state, {
+    module           :: module(),
+    state = ?NOSTATE :: state()
+}).
 
-start(Module) ->
-    ?FUNCTION_NAME(Module, []).
+-define(DEFAULT_TIMEOUT, 5000).
 
 start(Module, Options) ->
     Timeout = proplists:get_value(timeout, Options, infinity),
     SpawnOpts = proplists:get_value(spawn_opt, Options, []),
-    spawn_opt(fun() -> loop(Module, ?NOSTATE, Timeout) end, SpawnOpts).
-
-call(Server, Request) ->
-    ?FUNCTION_NAME(Server, Request, ?DEFAULT_TIMEOUT).
-
-call(Server, Request, Timeout) ->
-    wait(send(Server, Request), Timeout).
+    spawn_opt(fun() -> loop(#state{module = Module}, Timeout) end, SpawnOpts).
 
 send(Server, Request) ->
     Tag = make_ref(),
-    Server ! #srv{from = {self(), Tag}, request = Request},
+    Server ! #sync{request = Request, from = {self(), Tag}},
     Tag.
 
 wait(Tag) ->
-    ?FUNCTION_NAME(Tag, ?DEFAULT_TIMEOUT).
+    wait(Tag, ?DEFAULT_TIMEOUT).
 
 wait(Tag, Timeout) ->
     receive
@@ -57,37 +65,59 @@ wait(Tag, Timeout) ->
         timeout
     end.
 
+call(Server, Request) ->
+    ?FUNCTION_NAME(Server, Request, ?DEFAULT_TIMEOUT).
+
+call(Server, Request, Timeout) ->
+    wait(send(Server, Request), Timeout).
+
 reply({Pid, Tag}, Reply) ->
     Pid ! {Tag, Reply}.
 
-loop(Module, State, Timeout, Hibernate) when ?IS_HIBERNATE(Hibernate) ->
-    erlang:hibernate(?MODULE, ?FUNCTION_NAME, [Module, State, Timeout]);
-loop(Module, State, Timeout, _) ->
-    loop(Module, State, Timeout).
+loop(State, Timeout, Hibernate) when ?IS_HIBERNATE(Hibernate) ->
+    erlang:hibernate(?MODULE, ?FUNCTION_NAME, [State, Timeout]);
+loop(State, Timeout, _) ->
+    loop(State, Timeout).
 
 %% @private
-loop(Module, State, Timeout) ->
+loop(State, Timeout) ->
     receive
-        #srv{from = From, request = Request} ->
-            proc(Module, State, From, Request);
-        Info ->
-            proc(Module, State, undefined, Info)
+        #sync{request = Request, from = From} ->
+            proc_sync(Request, From, State);
+        Request ->
+            proc(Request, State)
     after Timeout ->
         self() ! timeout
     end.
 
-proc(Module, State, From, Request) ->
-    case Module:proc(Request, State) of
-        #ok{state = NewState, timeout = T, hibernate = H} ->
-            loop(Module, NewState, T, H);
-        #reply{reply = Reply, state = NewState, timeout = T, hibernate = H} ->
+proc_sync(Request, From, State) ->
+    case call_proc(Request, From, State) of
+        #ok{reply = ?NOREPLY, state = StateOut, timeout = T, hibernate = H} ->
+            loop(State#state{state = StateOut}, T, H);
+        #ok{reply = Reply, state = StateOut, timeout = T, hibernate = H} ->
             reply(From, Reply),
-            loop(Module, NewState, T, H);
-        #stop{reason = Reason, reply = ?NOREPLY, state = NewState} ->
-            terminate(Reason, NewState);
-        #stop{reason = Reason, reply = Reply, state = NewState} ->
-            terminate(Reason, NewState),
-            reply(From, Reply)
+            loop(State#state{state = StateOut}, T, H);
+        #stop{reply = ?NOREPLY, state = StateOut, reason = Reason} ->
+            terminate(Reason, StateOut);
+        #stop{reply = Reply, state = StateOut, reason = Reason} ->
+            reply(From, Reply),
+            terminate(Reason, StateOut)
+    end.
+
+proc(Request, #state{module = Module, state = StateIn} = State) ->
+    case Module:proc(Request, StateIn) of
+        #ok{state = StateOut, timeout = T, hibernate = H} ->
+            loop(State#state{state = StateOut}, T, H);
+        #stop{state = StateOut, reason = Reason} ->
+            terminate(Reason, StateOut)
+    end.
+
+call_proc(Request, From, #state{module = Module, state = StateIn}) ->
+    case erlang:function_exported(Module, proc, 3) of
+        true ->
+            Module:proc(Request, From, StateIn);
+        false ->
+            Module:proc(Request, StateIn)
     end.
 
 terminate(_Reason, _State) ->

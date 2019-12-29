@@ -35,10 +35,10 @@ stop(Server, _Reason, Timeout) ->
     gen_server2:call(Server, #fb{msg = stop}, Timeout).
 
 proc(#fb{msg = init}, ?NOSTATE) ->
-    #reply{reply = {ok, self()}, state = #state{}};
+    #ok{reply = {ok, self()}, state = #state{}};
 proc(#fb{msg = next}, #state{current = Cur} = State) ->
     Next = Cur + 1,
-    #reply{reply = fizz_buzz(Next), state = State#state{current = Next}};
+    #ok{reply = fizz_buzz(Next), state = State#state{current = Next}};
 proc(#fb{msg = print}, #state{current = Cur} = State) ->
     Next = Cur + 1,
     io:format("~p~n", [fizz_buzz(Next)]),

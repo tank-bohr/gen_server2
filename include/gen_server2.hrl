@@ -5,22 +5,16 @@
 -define(NOSTATE, '$nostate').
 
 -record(ok, {
-    state               :: term(),
-    timeout =  infinity :: non_neg_integer() | infinity,
-    hibernate = false   :: boolean()
-}).
-
--record(reply, {
-    reply              :: term(),
-    state              :: term(),
-    timeout = infinity :: non_neg_integer() | infinity,
-    hibernate = false  :: boolean()
+    reply     = ?NOREPLY :: term(),
+    state     = ?NOSTATE :: ?NOSTATE | tuple(),
+    timeout   = infinity :: non_neg_integer() | infinity,
+    hibernate = false    :: boolean()
 }).
 
 -record(stop, {
-    reason           :: term(),
     reply = ?NOREPLY :: term(),
-    state = ?NOSTATE :: term()
+    state = ?NOSTATE :: ?NOSTATE | tuple(),
+    reason           :: term()
 }).
 
 -endif.
