@@ -1,8 +1,6 @@
 -module(gen_server2_sync).
 -include("gen_server2.hrl").
 
--export([start/2]).
-
 -export([
     send/2,
     wait/1,
@@ -18,25 +16,9 @@
 -type from() :: {pid(), reference()}.
 -export_type([from/0]).
 
--callback proc(Request, State) -> gen_server2:return() when
-    Request :: gen_server2:request(),
-    State   :: gen_server2:state().
-
--callback proc(Request, From, State) -> gen_server2:return() when
-    Request :: gen_server2:request(),
-    From    :: from(),
-    State   :: gen_server2:state().
-
--optional_callbacks([proc/3]).
-
 -record(sync, {
     request :: gen_server2:request(),
     from    :: from()
-}).
-
--record(state, {
-    module           :: module(),
-    state = ?NOSTATE :: gen_server2:state()
 }).
 
 -define(DEFAULT_TIMEOUT, 5000).
@@ -70,27 +52,12 @@ call(Server, Request, Timeout) ->
 reply({Pid, Tag}, Reply) ->
     Pid ! {Tag, Reply}.
 
-proc(#sync{request = InitalState, from = From}, ?NOSTATE) ->
-    reply(From, self()),
-    #ok{state = InitalState};
-proc(#sync{request = Request, from = From}, State) ->
-    case call_proc(Request, From, State) of
-        #ok{reply = ?NOREPLY, state = StatOut} = Ok ->
-            Ok#ok{state = State#state{state = StatOut}};
-        #ok{reply = Reply, state = StatOut} = Ok ->
-            reply(From, Reply),
-            Ok#ok{state = State#state{state = StatOut}};
-        #stop{reply = ?NOREPLY, state = StatOut} = Stop ->
-            Stop#stop{state = State#state{state = StatOut}};
-        #stop{reply = Reply, state = StatOut} = Stop ->
-            reply(From, Reply),
-            Stop#stop{state = State#state{state = StatOut}}
-    end.
-
-call_proc(Request, From, #state{module = Module, state = StateIn}) ->
-    case erlang:function_exported(Module, proc, 3) of
-        true ->
-            Module:proc(Request, From, StateIn);
-        false ->
-            Module:proc(Request, StateIn)
-    end.
+proc(#sync{request = Request, from = From}, StateIn) ->
+    {Response, StateOut} = gen_server2:proc_for(?MODULE, Request, StateIn),
+    case maps:get(sync, Response) of
+        #{reply := Reply} ->
+            reply(From, Reply);
+        Else ->
+            ok
+    end,
+    StateOut.
