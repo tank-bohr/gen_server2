@@ -8,7 +8,7 @@
     print/1
 ]).
 
--behaviour(gen_server2).
+-behaviour(gen_server2_sync).
 -export([
     proc/2
 ]).
@@ -22,17 +22,17 @@
 }).
 
 start_link() ->
-    Pid = gen_server2:start(?MODULE, [{spawn_opt, [link]}]),
-    gen_server2:call(Pid, #fb{}).
+    Pid = gen_server2_sync:start(?MODULE, [{spawn_opt, [link]}]),
+    gen_server2_sync:call(Pid, #fb{}).
 
 next(Server) ->
-    gen_server2:call(Server, #fb{msg = next}).
+    gen_server2_sync:call(Server, #fb{msg = next}).
 
 print(Server) ->
-    gen_server2:call(Server, #fb{msg = print}).
+    gen_server2_sync:call(Server, #fb{msg = print}).
 
 stop(Server, _Reason, Timeout) ->
-    gen_server2:call(Server, #fb{msg = stop}, Timeout).
+    gen_server2_sync:call(Server, #fb{msg = stop}, Timeout).
 
 proc(#fb{msg = init}, ?NOSTATE) ->
     #ok{reply = {ok, self()}, state = #state{}};
