@@ -18,12 +18,12 @@
 }).
 
 -record(fb, { %% fizz_buzz
-    msg = init :: init | next | print | stop
+    msg :: next | print | stop
 }).
 
 start_link() ->
-    Pid = gen_server2:start(?MODULE, [{spawn_opt, [link]}]),
-    gen_server2:call(Pid, #fb{}).
+    Pid = gen_server2:start(?MODULE, #state{}, [{spawn_opt, [link]}]),
+    {ok, Pid}.
 
 next(Server) ->
     gen_server2:call(Server, #fb{msg = next}).
@@ -34,8 +34,6 @@ print(Server) ->
 stop(Server, _Reason, Timeout) ->
     gen_server2:call(Server, #fb{msg = stop}, Timeout).
 
-proc(#fb{msg = init}, ?NOSTATE) ->
-    #ok{reply = {ok, self()}, state = #state{}};
 proc(#fb{msg = next}, #state{current = Cur} = State) ->
     Next = Cur + 1,
     #ok{reply = fizz_buzz(Next), state = State#state{current = Next}};

@@ -1,7 +1,7 @@
 -module(gen_server2).
 -include("gen_server2.hrl").
 
--export([start/2]).
+-export([start/3]).
 
 -export([
     send/2,
@@ -14,9 +14,7 @@
 
 -export([loop/2]).
 
--define(IS_HIBERNATE(H), H =:= true orelse H =:= hibernate).
-
--type state()   :: ?NOSTATE | tuple().
+-type state()   :: tuple().
 -type return()  :: #ok{} | #stop{}.
 -type from()    :: {pid(), reference()}.
 -type request() :: tuple().
@@ -38,16 +36,16 @@
 }).
 
 -record(state, {
-    module           :: module(),
-    state = ?NOSTATE :: state()
+    module :: module(),
+    state  :: state()
 }).
 
 -define(DEFAULT_TIMEOUT, 5000).
 
-start(Module, Options) ->
+start(Module, State, Options) ->
     Timeout = proplists:get_value(timeout, Options, infinity),
     SpawnOpts = proplists:get_value(spawn_opt, Options, []),
-    spawn_opt(fun() -> loop(#state{module = Module}, Timeout) end, SpawnOpts).
+    spawn_opt(fun() -> loop(#state{module = Module, state = State}, Timeout) end, SpawnOpts).
 
 send(Server, Request) ->
     Tag = make_ref(),
@@ -74,7 +72,7 @@ call(Server, Request, Timeout) ->
 reply({Pid, Tag}, Reply) ->
     Pid ! {Tag, Reply}.
 
-loop(State, Timeout, Hibernate) when ?IS_HIBERNATE(Hibernate) ->
+loop(State, Timeout, _Hibernate = true) ->
     erlang:hibernate(?MODULE, ?FUNCTION_NAME, [State, Timeout]);
 loop(State, Timeout, _) ->
     loop(State, Timeout).

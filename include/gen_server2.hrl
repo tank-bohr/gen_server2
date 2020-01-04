@@ -2,18 +2,17 @@
 -define(GEN_SERVER2_HRL, true).
 
 -define(NOREPLY, '$noreply').
--define(NOSTATE, '$nostate').
 
 -record(ok, {
     reply     = ?NOREPLY :: term(),
-    state     = ?NOSTATE :: ?NOSTATE | tuple(),
+    state                :: tuple(),
     timeout   = infinity :: non_neg_integer() | infinity,
     hibernate = false    :: boolean()
 }).
 
 -record(stop, {
     reply = ?NOREPLY :: term(),
-    state = ?NOSTATE :: ?NOSTATE | tuple(),
+    state            :: tuple(),
     reason           :: term()
 }).
 
