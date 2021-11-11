@@ -1,5 +1,5 @@
--ifndef(GEN_SERVER2_HRL).
--define(GEN_SERVER2_HRL, true).
+-ifndef(SRV_HRL).
+-define(SRV_HRL, true).
 
 -define(NOREPLY, '$noreply').
 
@@ -11,9 +11,9 @@
 }).
 
 -record(stop, {
-    reply = ?NOREPLY :: term(),
-    state            :: tuple(),
-    reason           :: term()
+    reply  = ?NOREPLY :: term(),
+    reason = normal   :: term(),
+    state  = {}       :: tuple()
 }).
 
 -endif.
