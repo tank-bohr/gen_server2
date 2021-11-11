@@ -25,21 +25,25 @@
 -type init_result() :: {ok, gs_state()} |
                        {ok, gs_state(), timeout()} |
                        {ok, gs_state(), hibernate} |
+                       {ok, gs_state(), {continue, term()}} |
                        {stop, reason()} |
                        ignore.
 
 -type call_result() :: {reply, reply(), NewState :: gs_state()} |
                        {reply, reply(), NewState :: gs_state(), timeout()} |
                        {reply, reply(), NewState :: gs_state(), hibernate} |
+                       {reply, reply(), NewState :: gs_state(), {continue, term()}} |
                        {noreply, NewState :: gs_state()} |
                        {noreply, NewState :: gs_state(), timeout()} |
                        {noreply, NewState :: gs_state(), hibernate} |
+                       {noreply, NewState :: gs_state(), {continue, term()}} |
                        {stop, reason(), NewState :: gs_state()} |
                        {stop, reason(), reply(), NewState :: gs_state()}.
 
--type cast_result() :: {ok, gs_state()} |
-                       {ok, gs_state(), timeout()} |
-                       {ok, gs_state(), hibernate} |
+-type cast_result() :: {noreply, gs_state()} |
+                       {noreply, gs_state(), timeout()} |
+                       {noreply, gs_state(), hibernate} |
+                       {noreply, gs_state(), {continue, term()}} |
                        {stop, reason(), gs_state()}.
 
 -type info_result() :: {noreply, NewState :: gs_state()} |
@@ -66,11 +70,19 @@
     State  :: gs_state(),
     Result :: info_result().
 
+-callback handle_continue(Continue, State) -> Result when
+    Continue :: term(),
+    State    :: gs_state(),
+    Result   :: cast_result().
+
 -callback terminate(Reason, State) -> ok when
     Reason :: normal | shutdown | {shutdown, term()} | term(),
     State  :: gs_state().
 
--optional_callbacks([terminate/2]).
+-optional_callbacks([
+    handle_continue/2,
+    terminate/2
+]).
 
 -record(state, {
     gs_state  :: gs_state(),
@@ -87,6 +99,10 @@
 
 -record(call, {
     request :: term()
+}).
+
+-record(continue, {
+    payload :: term()
 }).
 
 -spec start(module(), term(), list()) -> {ok, pid()} | ignore | {error, term()}.
@@ -143,6 +159,9 @@ proc(#init{args = Args}, #state{cb_module = Mod} = State) ->
             #ok{reply = ok, state = State#state{gs_state = GsState}};
         {ok, GsState, hibernate} ->
             #ok{reply = ok, state = State#state{gs_state = GsState}, hibernate = true};
+        {ok, GsState, {continue, Continue}} ->
+            srv:send(self(), #continue{payload = Continue}),
+            #ok{reply = ok, state = State#state{gs_state = GsState}};
         {ok, GsState, Timeout} ->
             #ok{reply = ok, state = State#state{gs_state = GsState}, timeout = Timeout};
         {stop, Reason} ->
@@ -151,16 +170,9 @@ proc(#init{args = Args}, #state{cb_module = Mod} = State) ->
             #stop{reply = ignore, reason = normal, state = State}
     end;
 proc(#cast{request = Request}, #state{cb_module = Mod, gs_state = GsState} = State) ->
-    case Mod:handle_cast(Request, GsState) of
-        {ok, NewState} ->
-            #ok{state = State#state{gs_state = NewState}};
-        {ok, NewState, hibernate} ->
-            #ok{state = State#state{gs_state = NewState}, hibernate = true};
-        {ok, NewState, Timeout} ->
-            #ok{state = State#state{gs_state = NewState}, timeout = Timeout};
-        {stop, Reason, NewState} ->
-            #stop{reason = Reason, state = State#state{gs_state = NewState}}
-    end;
+    handle(Mod:handle_cast(Request, GsState), State);
+proc(#continue{payload = Payload}, #state{cb_module = Mod, gs_state = GsState} = State) ->
+    handle(Mod:handle_continue(Payload, GsState), State);
 proc(#stop{reason = Reason}, #state{cb_module = Mod, gs_state = GsState} = State) ->
     case Mod:function_exported(terminate, 3) of
         true ->
@@ -170,16 +182,7 @@ proc(#stop{reason = Reason}, #state{cb_module = Mod, gs_state = GsState} = State
             #stop{reason = Reason, state = State}
     end;
 proc(Request, #state{cb_module = Mod, gs_state = GsState} = State) ->
-    case Mod:handle_info(Request, GsState) of
-        {ok, NewState} ->
-            #ok{state = State#state{gs_state = NewState}};
-        {ok, NewState, hibernate} ->
-            #ok{state = State#state{gs_state = NewState}, hibernate = true};
-        {ok, NewState, Timeout} ->
-            #ok{state = State#state{gs_state = NewState}, timeout = Timeout};
-        {stop, Reason, NewState} ->
-            #stop{reason = Reason, state = State#state{gs_state = NewState}}
-    end.
+    handle(Mod:handle_info(Request, GsState), State).
 
 proc(#call{request = Request}, From, #state{cb_module = Mod, gs_state = GsState} = State) ->
     case Mod:handle_call(Request, From, GsState) of
@@ -199,6 +202,21 @@ proc(#call{request = Request}, From, #state{cb_module = Mod, gs_state = GsState}
             #stop{reason = Reason, state = State#state{gs_state = NewState}};
         {stop, Reason, Reply, NewState} ->
             #stop{reply = Reply, reason = Reason, state = State#state{gs_state = NewState}}
+    end.
+
+handle(CallbackResult, State) ->
+    case CallbackResult of
+        {noreply, NewState} ->
+            #ok{state = State#state{gs_state = NewState}};
+        {noreply, NewState, hibernate} ->
+            #ok{state = State#state{gs_state = NewState}, hibernate = true};
+        {noreply, NewState, {continue, Continue}} ->
+            srv:send(self(), #continue{payload = Continue}),
+            #ok{state = State#state{gs_state = NewState}};
+        {noreply, NewState, Timeout} ->
+            #ok{state = State#state{gs_state = NewState}, timeout = Timeout};
+        {stop, Reason, NewState} ->
+            #stop{reason = Reason, state = State#state{gs_state = NewState}}
     end.
 
 proplist_to_map(List) ->
