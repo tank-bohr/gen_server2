@@ -15,7 +15,9 @@
     cast/2,
     reply/2,
     stop/1,
-    stop/3
+    stop/3,
+    send_request/2,
+    wait_response/2
 ]).
 
 -type reply()    :: term().
@@ -152,6 +154,12 @@ stop(Pid, Reason, Timeout) ->
     after Timeout ->
         exit(timeout)
     end.
+
+send_request(Pid, Request) ->
+    srv:send(Pid, Request).
+
+wait_response(RequestId, Timeout) ->
+    srv:wait(RequestId, Timeout).
 
 proc(#init{args = Args}, #state{cb_module = Mod} = State) ->
     case Mod:init(Args) of
